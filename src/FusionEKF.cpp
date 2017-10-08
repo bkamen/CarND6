@@ -36,8 +36,31 @@ FusionEKF::FusionEKF() {
     * Finish initializing the FusionEKF.
     * Set the process and measurement noises
   */
+  
+  // laser measurement matrix
+  H_laser_ << 1, 0, 0, 0,
+              0, 1, 0, 0;
+  Hj_ << 1, 1, 0, 0,
+         1, 1, 0, 0,
+         1, 1, 1, 1;
 
+  // initial system transition matrix
+  F_ = MatrixXd(4, 4);
 
+  F_ << 1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1;
+  ekf_.F_ = F_;
+
+  // state covariance matrix
+  P_ = MatrixXd(4, 4);
+
+  P_ << 1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1000, 0,
+        0, 0, 0, 1000;
+  ekf_.P_ = P_;
 }
 
 /**
@@ -67,11 +90,22 @@ void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
       /**
       Convert radar from polar to cartesian coordinates and initialize state.
       */
+      float ro, theta, ro_dot;
+      ro = measurement_pack.raw_measurements_[0];
+      theta = measurement_pack.raw_measurements_[1];
+      ro_dot = measurement_pack.raw_measurements_[2];
+
+      ekf_.x_[0] = ro * cos(theta);
+      ekf_.x_[1] = ro * sin(theta);
+      ekf_.x_[2] = ro_dot * cos(theta);
+      ekf_.x_[3] = ro_dot * sin(thea);
     }
     else if (measurement_pack.sensor_type_ == MeasurementPackage::LASER) {
       /**
       Initialize state.
       */
+      ekf_.x_[0] = measurement_pack.raw_measurements_[0];
+      ekf_.x_[1] = measurement_pack.raw_measurements_[1];
     }
 
     // done initializing, no need to predict or update
@@ -90,6 +124,27 @@ void FusionEKF::ProcessMeasurement(const MeasurementPackage &measurement_pack) {
      * Update the process noise covariance matrix.
      * Use noise_ax = 9 and noise_ay = 9 for your Q matrix.
    */
+  // time variables
+  float dt = measurement_package.timestamp_ - previous_timestamp_;
+  previous_timestamp_ = measurement_package.timestamp_;
+  float dt2 = dt*dt;
+  float dt3 = dt2*dt;
+  float dt4 = dt3*dt;
+
+  // process noise
+  float noise_ax = 9;
+  float noise_ay = 9;
+
+  // process noise covariance matrix
+  ekf_.Q_ = MatrixXd(4, 4);
+  ekf_.Q_ << dt4/4 * noise_ax, 0, dt3/2 noise_ax, 0,
+             0, dt4/4 * noise_ay, 0, dt3/2*noise_ay,
+             dt3/2*noise_ax, 0, dt2*noise_ax, 0,
+             0, dt3/2*noise_ay, 0, dt2*noise_ay;
+  
+  // update state transition matrix
+  ekf_.F_(0, 2) = dt;
+  ekf_.F_(1, 3) = dt;
 
   ekf_.Predict();
 
